@@ -1,0 +1,82 @@
+<!-- ============================================================
+     颐邻通 V1.0 - 登录页 (login.html)
+     所有角色统一登录入口，登录成功后按角色跳转：
+     家属 → consult.html    助老员/管理员 → workorder.html
+     ============================================================ -->
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>颐邻通 · 登录</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<div class="login-container">
+    <h1>颐邻通</h1>
+    <h2>社区养老便民服务平台 · V1.0</h2>
+    <p style="text-align:center; color:#999; font-size:12px; margin-bottom:24px;">
+        家属、助老员、管理员 统一登录入口
+    </p>
+
+    <div class="form-group">
+        <label>账号</label>
+        <input type="text" id="account" placeholder="请输入账号（如 fam01 / help01 / admin）">
+    </div>
+
+    <div class="form-group">
+        <label>密码</label>
+        <input type="password" id="password" placeholder="请输入密码（测试账号统一为 123456）"
+               onkeydown="if(event.key==='Enter') doLogin()">
+    </div>
+
+    <button onclick="doLogin()" style="width:100%; font-size:16px; padding:12px;">登 录</button>
+    <div id="msgBox"></div>
+
+    <div style="margin-top:24px; padding:12px; background:#f8f9fa; border-radius:4px; font-size:12px; color:#666;">
+        <strong>测试账号：</strong><br>
+        家属：fam01 / 123456 &nbsp;→&nbsp; consult.html<br>
+        助老员：help01 / 123456 &nbsp;→&nbsp; workorder.html<br>
+        管理员：admin / 123456 &nbsp;→&nbsp; workorder.html
+    </div>
+</div>
+
+<script src="js/api.js"></script>
+<script>
+    async function doLogin() {
+        const account  = document.getElementById("account").value.trim();
+        const password = document.getElementById("password").value.trim();
+
+        if (!account || !password) {
+            showMsg("msgBox", "请输入账号和密码", "error");
+            return;
+        }
+
+        try {
+            const user = await apiLogin(account, password);
+            // 把用户信息存到 sessionStorage，方便后续页面使用
+            sessionStorage.setItem("user", JSON.stringify(user));
+            showMsg("msgBox", `欢迎回来，${user.name}（${user.role}）正在跳转...`, "success");
+
+            // 按角色跳转
+            setTimeout(() => {
+                if (user.role === "家属") {
+                    location.href = "consult.html";
+                } else {
+                    location.href = "workorder.html";
+                }
+            }, 500);
+        } catch (e) {
+            showMsg("msgBox", e.message, "error");
+        }
+    }
+
+    // 页面加载时检查是否已登录
+    if (sessionStorage.getItem("user")) {
+        const user = JSON.parse(sessionStorage.getItem("user"));
+        location.href = (user.role === "家属") ? "consult.html" : "workorder.html";
+    }
+</script>
+
+</body>
+</html>

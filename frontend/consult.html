@@ -1,0 +1,139 @@
+<!-- ============================================================
+     颐邻通 V1.0 - 咨询工单页 (consult.html)
+     家属端：提交咨询工单 / 查看自己的工单 / 取消工单 / 查看答复结果
+     ============================================================ -->
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>颐邻通 · 养老智能咨询</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<!-- 顶部导航 -->
+<div class="topbar">
+    <h1 style="border:none; margin:0; font-size:18px;">颐邻通 · 养老智能咨询</h1>
+    <div class="user-info">
+        你好，<strong id="userName">--</strong>（家属）
+        <button class="secondary" onclick="logout()" style="margin-left:12px; padding:6px 12px;">退出登录</button>
+    </div>
+</div>
+
+<!-- 提交咨询工单 -->
+<h2>📝 提交新的咨询</h2>
+<div style="background:#fff; padding:20px; border-radius:6px; box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+    <div class="form-group">
+        <label>老人姓名</label>
+        <input type="text" id="elderName" placeholder="请输入要咨询的老人姓名">
+    </div>
+    <div class="form-group">
+        <label>咨询内容</label>
+        <textarea id="content" rows="4" placeholder="例如：请问社区近期有没有免费体检活动？"></textarea>
+    </div>
+    <button onclick="submitOrder()">提交咨询工单</button>
+    <div id="submitMsg"></div>
+</div>
+
+<!-- 我的工单列表 -->
+<h2>📋 我的工单</h2>
+<button class="secondary" onclick="loadOrders()" style="margin-bottom:10px;">🔄 刷新列表</button>
+<table id="orderTable">
+    <thead>
+        <tr>
+            <th>工单编号</th>
+            <th>老人</th>
+            <th>咨询内容</th>
+            <th>提交时间</th>
+            <th>状态</th>
+            <th>答复</th>
+            <th>操作</th>
+        </tr>
+    </thead>
+    <tbody><!-- JS 渲染 --></tbody>
+</table>
+
+<script src="js/api.js"></script>
+<script>
+    let currentUser = null;
+
+    // ---------- 初始化 ----------
+    function init() {
+        const saved = sessionStorage.getItem("user");
+        if (!saved) { location.href = "login.html"; return; }
+        currentUser = JSON.parse(saved);
+        document.getElementById("userName").textContent = currentUser.name;
+        loadOrders();
+    }
+
+    function logout() {
+        sessionStorage.removeItem("user");
+        location.href = "login.html";
+    }
+
+    // ---------- 提交咨询 ----------
+    async function submitOrder() {
+        const elder_name = document.getElementById("elderName").value.trim();
+        const content    = document.getElementById("content").value.trim();
+        if (!elder_name || !content) {
+            showMsg("submitMsg", "请填写老人姓名和咨询内容", "error");
+            return;
+        }
+        try {
+            await apiCreateOrder(elder_name, content, currentUser.id);
+            showMsg("submitMsg", "工单提交成功！等待处理...", "success");
+            document.getElementById("elderName").value = "";
+            document.getElementById("content").value = "";
+            loadOrders();
+        } catch (e) {
+            showMsg("submitMsg", e.message, "error");
+        }
+    }
+
+    // ---------- 查询我的工单 ----------
+    async function loadOrders() {
+        try {
+            const list = await apiListOrders();
+            // V1.0 简化：前端显示全部，实际项目应按 submitter_id 过滤
+            const tbody = document.querySelector("#orderTable tbody");
+            tbody.innerHTML = list.map(o => `
+                <tr>
+                    <td>${o.order_no}</td>
+                    <td>${o.elder_name}</td>
+                    <td>${o.content}</td>
+                    <td>${o.submit_time}</td>
+                    <td>${statusTag(o.status)}</td>
+                    <td style="max-width:200px;">${o.reply_content || '<span style="color:#999;">暂无答复</span>'}</td>
+                    <td>
+                        ${canCancel(o.status)
+                            ? `<button class="danger" onclick="doCancel(${o.id})">取消</button>`
+                            : '<span style="color:#bbb;">不可操作</span>'}
+                    </td>
+                </tr>
+            `).join("") || `<tr><td colspan="7" style="text-align:center; padding:20px; color:#999;">暂无工单</td></tr>`;
+        } catch (e) {
+            alert("加载失败：" + e.message);
+        }
+    }
+
+    function canCancel(status) {
+        // 复核通过 / 已办结 / 已取消 → 不可取消
+        return !["复核通过", "已办结", "已取消"].includes(status);
+    }
+
+    async function doCancel(id) {
+        if (!confirm("确认取消这条工单吗？")) return;
+        try {
+            await apiCancelOrder(id);
+            alert("已取消");
+            loadOrders();
+        } catch (e) {
+            alert("取消失败：" + e.message);
+        }
+    }
+
+    init();
+</script>
+
+</body>
+</html>

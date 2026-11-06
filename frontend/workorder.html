@@ -1,0 +1,162 @@
+<!-- ============================================================
+     颐邻通 V1.0 - 工单处理台 (workorder.html)
+     后台端：管理员/助老员使用
+     功能：查看工单列表 / 分派 / 复核审批（通过 或 驳回重议）
+     ============================================================ -->
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>颐邻通 · 工单处理台</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<!-- 顶部导航 -->
+<div class="topbar">
+    <h1 style="border:none; margin:0; font-size:18px;">颐邻通 · 工单处理台</h1>
+    <div class="user-info">
+        当前用户：<strong id="userName">--</strong>（<span id="userRole">--</span>）
+        <button class="secondary" onclick="logout()" style="margin-left:12px; padding:6px 12px;">退出登录</button>
+    </div>
+</div>
+
+<!-- 全部工单列表（后台统一看所有工单） -->
+<h2>📋 全部工单</h2>
+<button class="secondary" onclick="loadAll()" style="margin-bottom:10px;">🔄 刷新工单</button>
+
+<table>
+    <thead>
+        <tr>
+            <th>工单编号</th>
+            <th>老人</th>
+            <th>咨询内容</th>
+            <th>提交时间</th>
+            <th>状态</th>
+            <th>答复</th>
+            <th>操作</th>
+        </tr>
+    </thead>
+    <tbody id="orderBody"><!-- JS 渲染 --></tbody>
+</table>
+
+<!-- 批量筛选快捷按钮 -->
+<div style="margin-top:16px;">
+    <span style="color:#666; margin-right:8px;">快捷筛选：</span>
+    <button class="secondary" onclick="filterBy('待分派')">待分派</button>
+    <button class="secondary" onclick="filterBy('处理协同中')">处理协同中</button>
+    <button class="secondary" onclick="filterBy('复核通过')">已通过</button>
+    <button class="secondary" onclick="filterBy('已取消')">已取消</button>
+    <button class="secondary" onclick="loadAll()">全部</button>
+</div>
+
+<script src="js/api.js"></script>
+<script>
+    let currentUser = null;
+    let allOrders = [];  // 缓存全部工单，方便前端筛选
+
+    // ---------- 初始化 ----------
+    function init() {
+        const saved = sessionStorage.getItem("user");
+        if (!saved) { location.href = "login.html"; return; }
+        currentUser = JSON.parse(saved);
+        document.getElementById("userName").textContent = currentUser.name;
+        document.getElementById("userRole").textContent = currentUser.role;
+        loadAll();
+    }
+
+    function logout() {
+        sessionStorage.removeItem("user");
+        location.href = "login.html";
+    }
+
+    // ---------- 加载全部工单 ----------
+    async function loadAll() {
+        try {
+            allOrders = await apiListOrders();
+            renderTable(allOrders);
+        } catch (e) {
+            alert("加载失败：" + e.message);
+        }
+    }
+
+    function filterBy(status) {
+        const filtered = status ? allOrders.filter(o => o.status === status) : allOrders;
+        renderTable(filtered);
+    }
+
+    function renderTable(list) {
+        const tbody = document.getElementById("orderBody");
+        tbody.innerHTML = list.map(o => `
+            <tr>
+                <td>${o.order_no}</td>
+                <td>${o.elder_name}</td>
+                <td>${o.content}</td>
+                <td>${o.submit_time}</td>
+                <td>${statusTag(o.status)}</td>
+                <td style="max-width:180px;">${o.reply_content || '<span style="color:#999;">--</span>'}</td>
+                <td>${renderActions(o)}</td>
+            </tr>
+        `).join("") || `<tr><td colspan="7" style="text-align:center; padding:20px; color:#999;">暂无工单</td></tr>`;
+    }
+
+    // ---------- 渲染操作按钮 ----------
+    function renderActions(o) {
+        let btns = "";
+
+        // ① 待分派 → 可分派
+        if (o.status === "待分派") {
+            btns += `<button onclick="doAssign(${o.id})">分派给我</button> `;
+        }
+
+        // ② 处理协同中/复核中 → 可复核（通过 或 驳回）
+        if (o.status === "处理协同中" || o.status === "复核中") {
+            btns += `
+                <button class="success" onclick="doReview(${o.id}, '通过')">通过</button>
+                <button class="reject" onclick="doReview(${o.id}, '驳回重议')">驳回</button>
+            `;
+        }
+
+        // ③ 已取消 / 已办结 / 复核通过 / 驳回重议 → 不可操作
+        if (!btns) {
+            btns = '<span style="color:#bbb;">已完成</span>';
+        }
+
+        return btns;
+    }
+
+    // ---------- 分派 ----------
+    async function doAssign(id) {
+        if (!confirm("确认把这条工单分派给当前处理人吗？")) return;
+        try {
+            await apiAssignOrder(id);
+            alert("分派成功！状态变更为【处理协同中】");
+            loadAll();
+        } catch (e) {
+            alert("分派失败：" + e.message);
+        }
+    }
+
+    // ---------- 复核审批 ----------
+    async function doReview(id, result) {
+        // 让用户填答复内容
+        const reply = prompt(
+            result === "通过" ? "请输入给家属的答复内容：" : "请输入驳回意见：",
+            ""
+        );
+        if (reply === null) return;
+
+        try {
+            await apiReviewOrder(id, result, reply);
+            alert(`复核完成，结果：${result}`);
+            loadAll();
+        } catch (e) {
+            alert("复核失败：" + e.message);
+        }
+    }
+
+    init();
+</script>
+
+</body>
+</html>
